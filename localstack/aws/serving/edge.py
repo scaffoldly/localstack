@@ -1,6 +1,6 @@
 import asyncio
 
-from localstack.services.plugins import SERVICE_PLUGINS
+from localstack.runtime import components
 
 
 def serve_gateway(bind_address, port, use_ssl, asynchronous=False):
@@ -10,7 +10,6 @@ def serve_gateway(bind_address, port, use_ssl, asynchronous=False):
     """
     from hypercorn import Config
 
-    from localstack.aws.app import LocalstackAwsGateway
     from localstack.aws.serving.asgi import AsgiGateway
     from localstack.http.hypercorn import HypercornServer
     from localstack.logging.setup import setup_hypercorn_logger
@@ -32,7 +31,7 @@ def serve_gateway(bind_address, port, use_ssl, asynchronous=False):
 
     # build gateway
     loop = asyncio.new_event_loop()
-    app = AsgiGateway(LocalstackAwsGateway(SERVICE_PLUGINS), event_loop=loop)
+    app = AsgiGateway(components.gateway(), event_loop=loop)
 
     # start serving gateway
     server = HypercornServer(app, config, loop)
