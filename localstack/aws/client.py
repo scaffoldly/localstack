@@ -279,10 +279,6 @@ def _create_and_enrich_request(
     return request
 
 
-class _RawResponseAdapter(_ResponseStream):
-    """This is a compatibility adapter for the ``raw`` attribute passed to botocore's AWSResponse."""
-
-
 class GatewayShortCircuit:
     gateway: Gateway
 
@@ -298,8 +294,6 @@ class GatewayShortCircuit:
 
         # create request
         context = RequestContext()
-        from localstack.aws.forwarder import create_http_request
-
         context.request = create_http_request(request)
         context.service = operation.service_model
         context.operation = operation
