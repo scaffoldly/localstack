@@ -334,7 +334,7 @@ def connect_to_service(
             from localstack.aws.client import GatewayShortCircuit
             from localstack.runtime import components
 
-            GatewayShortCircuit.modify_client(client, components.gateway())
+            GatewayShortCircuit.modify_client(new_client, components.gateway())
 
         if cache:
             BOTO_CLIENTS_CACHE[cache_key] = new_client
