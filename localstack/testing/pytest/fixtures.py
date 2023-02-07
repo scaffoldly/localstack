@@ -47,6 +47,7 @@ from localstack.utils.testutil import start_http_server
 if TYPE_CHECKING:
     from mypy_boto3_acm import ACMClient
     from mypy_boto3_apigateway import APIGatewayClient
+    from mypy_boto3_cloudcontrol import CloudControlApiClient
     from mypy_boto3_cloudformation import CloudFormationClient
     from mypy_boto3_cloudwatch import CloudWatchClient
     from mypy_boto3_cognito_idp import CognitoIdentityProviderClient
@@ -292,6 +293,11 @@ def sns_client() -> "SNSClient":
 @pytest.fixture(scope="class")
 def cfn_client() -> "CloudFormationClient":
     return _client("cloudformation")
+
+
+@pytest.fixture(scope="class")
+def cloudcontrol_client() -> "CloudControlApiClient":
+    return _client("cloudcontrol")
 
 
 @pytest.fixture(scope="class")
