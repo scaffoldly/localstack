@@ -1600,6 +1600,10 @@ def aws_response_serializer(service: str, operation: str):
             else:
                 raise ValueError(f"could not find Request in signature of function {fn}")
 
+            # TODO: we have no context here
+            # TODO: maybe try to get the request ID from the headers first before generating a new one
+            request_id = long_uid()
+
             try:
                 response = fn(*args, **kwargs)
 
@@ -1613,7 +1617,9 @@ def aws_response_serializer(service: str, operation: str):
                 )
 
             except ServiceException as e:
-                return serializer.serialize_error_to_response(e, operation_model, request.headers)
+                return serializer.serialize_error_to_response(
+                    e, operation_model, request.headers, request_id
+                )
             except Exception as e:
                 return serializer.serialize_error_to_response(
                     CommonServiceException(
@@ -1621,6 +1627,7 @@ def aws_response_serializer(service: str, operation: str):
                     ),
                     operation_model,
                     request.headers,
+                    request_id,
                 )
 
         return _proxy
