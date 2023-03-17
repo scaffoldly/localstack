@@ -106,6 +106,7 @@ DoubleWithConstraints = float
 DrainSeconds = int
 EfaSupportedFlag = bool
 EgressOnlyInternetGatewayId = str
+EipAllocationPublicIp = str
 ElasticGpuId = str
 ElasticInferenceAcceleratorCount = int
 ElasticIpAssociationId = str
@@ -484,6 +485,7 @@ class BootModeType(str):
 class BootModeValues(str):
     legacy_bios = "legacy-bios"
     uefi = "uefi"
+    uefi_preferred = "uefi-preferred"
 
 
 class BundleTaskState(str):
@@ -1046,6 +1048,11 @@ class InstanceAttributeName(str):
 class InstanceAutoRecoveryState(str):
     disabled = "disabled"
     default = "default"
+
+
+class InstanceBootModeValues(str):
+    legacy_bios = "legacy-bios"
+    uefi = "uefi"
 
 
 class InstanceEventWindowState(str):
@@ -1740,6 +1747,25 @@ class InstanceType(str):
     r6idn_16xlarge = "r6idn.16xlarge"
     r6idn_24xlarge = "r6idn.24xlarge"
     r6idn_32xlarge = "r6idn.32xlarge"
+    c7g_metal = "c7g.metal"
+    m7g_medium = "m7g.medium"
+    m7g_large = "m7g.large"
+    m7g_xlarge = "m7g.xlarge"
+    m7g_2xlarge = "m7g.2xlarge"
+    m7g_4xlarge = "m7g.4xlarge"
+    m7g_8xlarge = "m7g.8xlarge"
+    m7g_12xlarge = "m7g.12xlarge"
+    m7g_16xlarge = "m7g.16xlarge"
+    m7g_metal = "m7g.metal"
+    r7g_medium = "r7g.medium"
+    r7g_large = "r7g.large"
+    r7g_xlarge = "r7g.xlarge"
+    r7g_2xlarge = "r7g.2xlarge"
+    r7g_4xlarge = "r7g.4xlarge"
+    r7g_8xlarge = "r7g.8xlarge"
+    r7g_12xlarge = "r7g.12xlarge"
+    r7g_16xlarge = "r7g.16xlarge"
+    r7g_metal = "r7g.metal"
 
 
 class InstanceTypeHypervisor(str):
@@ -3770,7 +3796,7 @@ class AssignPrivateNatGatewayAddressResult(TypedDict, total=False):
 class AssociateAddressRequest(ServiceRequest):
     AllocationId: Optional[AllocationId]
     InstanceId: Optional[InstanceId]
-    PublicIp: Optional[String]
+    PublicIp: Optional[EipAllocationPublicIp]
     AllowReassociation: Optional[Boolean]
     DryRun: Optional[Boolean]
     NetworkInterfaceId: Optional[NetworkInterfaceId]
@@ -5348,7 +5374,7 @@ class CreateCoipPoolResult(TypedDict, total=False):
 
 
 class CreateCustomerGatewayRequest(ServiceRequest):
-    BgpAsn: Integer
+    BgpAsn: Optional[Integer]
     PublicIp: Optional[String]
     CertificateArn: Optional[String]
     Type: GatewayType
@@ -10860,6 +10886,7 @@ class Instance(TypedDict, total=False):
     Ipv6Address: Optional[String]
     TpmSupport: Optional[String]
     MaintenanceOptions: Optional[InstanceMaintenanceOptions]
+    CurrentInstanceBootMode: Optional[InstanceBootModeValues]
 
 
 InstanceList = List[Instance]
@@ -13515,7 +13542,7 @@ class DisableVpcClassicLinkResult(TypedDict, total=False):
 
 class DisassociateAddressRequest(ServiceRequest):
     AssociationId: Optional[ElasticIpAssociationId]
-    PublicIp: Optional[String]
+    PublicIp: Optional[EipAllocationPublicIp]
     DryRun: Optional[Boolean]
 
 
@@ -15256,6 +15283,7 @@ class ModifyImageAttributeRequest(ServiceRequest):
     DryRun: Optional[Boolean]
     OrganizationArns: Optional[OrganizationArnStringList]
     OrganizationalUnitArns: Optional[OrganizationalUnitArnStringList]
+    ImdsSupport: Optional[AttributeValue]
 
 
 class ModifyInstanceAttributeRequest(ServiceRequest):
@@ -17183,7 +17211,7 @@ class Ec2Api:
         context: RequestContext,
         allocation_id: AllocationId = None,
         instance_id: InstanceId = None,
-        public_ip: String = None,
+        public_ip: EipAllocationPublicIp = None,
         allow_reassociation: Boolean = None,
         dry_run: Boolean = None,
         network_interface_id: NetworkInterfaceId = None,
@@ -21185,7 +21213,7 @@ class Ec2Api:
         self,
         context: RequestContext,
         association_id: ElasticIpAssociationId = None,
-        public_ip: String = None,
+        public_ip: EipAllocationPublicIp = None,
         dry_run: Boolean = None,
     ) -> None:
         raise NotImplementedError
@@ -22173,6 +22201,7 @@ class Ec2Api:
         dry_run: Boolean = None,
         organization_arns: OrganizationArnStringList = None,
         organizational_unit_arns: OrganizationalUnitArnStringList = None,
+        imds_support: AttributeValue = None,
     ) -> None:
         raise NotImplementedError
 

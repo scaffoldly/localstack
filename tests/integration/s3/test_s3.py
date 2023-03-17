@@ -629,6 +629,37 @@ class TestS3:
         assert is_sub_dict(sub_dict, response)
 
     @pytest.mark.aws_validated
+    @pytest.mark.skip_snapshot_verify(paths=["$..EncodingType", "$..VersionIdMarker"])
+    def test_list_objects_versions_with_prefix(self, s3_client, s3_bucket, snapshot):
+        snapshot.add_transformer(snapshot.transform.s3_api())
+        objects = [
+            {"Key": "dir/test", "Content": b"content 1"},
+            {"Key": "dir/subdir/test2", "Content": b"content 2"},
+        ]
+        params = [
+            {"Prefix": "dir/", "Delimiter": "/", "Id": 1},
+            {"Prefix": "dir/s", "Delimiter": "/", "Id": 2},
+            {"Prefix": "dir/test", "Delimiter": "/", "Id": 3},
+            {"Prefix": "dir/subdir", "Delimiter": "/", "Id": 4},
+            {"Prefix": "dir/subdir/", "Delimiter": "/", "Id": 5},
+            {"Prefix": "dir/subdir/test2", "Delimiter": "/", "Id": 6},
+        ]
+
+        s3_client.put_bucket_versioning(
+            Bucket=s3_bucket,
+            VersioningConfiguration={"Status": "Enabled"},
+        )
+
+        for obj in objects:
+            s3_client.put_object(Bucket=s3_bucket, Key=obj["Key"], Body=obj["Content"])
+
+        for param in params:
+            response = s3_client.list_object_versions(
+                Bucket=s3_bucket, Delimiter=param["Delimiter"], Prefix=param["Prefix"]
+            )
+            snapshot.match(f"list-object-version-{param['Id']}", response)
+
+    @pytest.mark.aws_validated
     @pytest.mark.skip_snapshot_verify(condition=is_old_provider, path="$..Error.BucketName")
     def test_get_object_no_such_bucket(self, s3_client, snapshot):
         snapshot.add_transformer(snapshot.transform.key_value("BucketName"))
@@ -2902,6 +2933,96 @@ class TestS3:
         snapshot.match("copy-obj-wrong-kms-key", e.value.response)
 
     @pytest.mark.aws_validated
+    @pytest.mark.skip_snapshot_verify(
+        paths=[
+            "$..ETag",  # the ETag is different as we don't encrypt the object with the KMS key
+        ]
+    )
+    @pytest.mark.xfail(
+        condition=LEGACY_S3_PROVIDER, reason="Validation not implemented in legacy provider"
+    )
+    def test_s3_sse_validate_kms_key_state(
+        self,
+        s3_client,
+        s3_bucket,
+        kms_client,
+        kms_create_key,
+        monkeypatch,
+        snapshot,
+    ):
+        snapshot.add_transformer(snapshot.transform.key_value("Description"))
+        data = b"test-sse"
+
+        # create key in the same region as the bucket
+        kms_key = kms_create_key()
+        # snapshot the KMS key to save the UUID for replacement in Error message.
+        snapshot.match("create-kms-key", kms_key)
+        key_name = "put-object-with-sse"
+        put_object_with_sse = s3_client.put_object(
+            Bucket=s3_bucket,
+            Key=key_name,
+            Body=data,
+            ServerSideEncryption="aws:kms",
+            SSEKMSKeyId=kms_key["KeyId"],
+        )
+        snapshot.match("success-put-object-sse", put_object_with_sse)
+
+        get_object_with_sse = s3_client.get_object(
+            Bucket=s3_bucket,
+            Key=key_name,
+        )
+        snapshot.match("success-get-object-sse", get_object_with_sse)
+
+        # disable the key
+        kms_client.disable_key(KeyId=kms_key["KeyId"])
+
+        # test whether the validation is skipped when not disabling the validation
+        if not is_aws_cloud():
+            get_object = s3_client.get_object(Bucket=s3_bucket, Key=key_name)
+            assert get_object["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+            response = s3_client.put_object(
+                Bucket=s3_bucket,
+                Key="test-sse-kms-disabled-key-no-check",
+                Body=data,
+                ServerSideEncryption="aws:kms",
+                SSEKMSKeyId=kms_key["KeyId"],
+            )
+            assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+        # activating the validation, for AWS parity
+        monkeypatch.setattr(config, "S3_SKIP_KMS_KEY_VALIDATION", False)
+
+        # disable the key, try to put an object
+        kms_client.disable_key(KeyId=kms_key["KeyId"])
+
+        def _is_key_disabled():
+            key = kms_client.describe_key(KeyId=kms_key["KeyId"])
+            assert not key["KeyMetadata"]["Enabled"]
+
+        retry(_is_key_disabled, retries=3, sleep=0.5)
+        if is_aws_cloud():
+            # time for the key state to be propagated
+            time.sleep(5)
+
+        with pytest.raises(ClientError) as e:
+            s3_client.get_object(
+                Bucket=s3_bucket,
+                Key=key_name,
+            )
+        snapshot.match("get-obj-disabled-key", e.value.response)
+
+        with pytest.raises(ClientError) as e:
+            s3_client.put_object(
+                Bucket=s3_bucket,
+                Key="key-is-deactivated",
+                Body=data,
+                ServerSideEncryption="aws:kms",
+                SSEKMSKeyId=kms_key["KeyId"],
+            )
+        snapshot.match("put-obj-disabled-key", e.value.response)
+
+    @pytest.mark.aws_validated
     @pytest.mark.xfail(
         condition=LEGACY_S3_PROVIDER, reason="Validation not implemented in legacy provider"
     )
@@ -5078,7 +5199,15 @@ class TestS3DeepArchive:
         response = s3_client.head_object(Bucket=bucket_name, Key=object_key)
         if 'ongoing-request="false"' in response.get("Restore", ""):
             # if the restoring happens in LocalStack (or was fast in AWS) we can retrieve the object
-            response = s3_client.get_object(Bucket=bucket_name, Key=object_key)
+            restore_bucket_name = f"bucket-{short_uid()}"
+            s3_create_bucket(Bucket=restore_bucket_name)
+
+            s3_client.copy_object(
+                CopySource={"Bucket": bucket_name, "Key": object_key},
+                Bucket=restore_bucket_name,
+                Key=object_key,
+            )
+            response = s3_client.get_object(Bucket=restore_bucket_name, Key=object_key)
             assert "etag" in response.get("ResponseMetadata").get("HTTPHeaders")
 
 
@@ -5902,6 +6031,47 @@ class TestS3StaticWebsiteHosting:
                 "BucketName: (.*?)</li>", replacement="BucketName: <bucket-name></li>"
             ),
         ]
+
+
+class TestS3Routing:
+    @pytest.mark.only_localstack
+    @pytest.mark.parametrize(
+        "domain, use_virtual_address",
+        [
+            ("s3.amazonaws.com", False),
+            ("s3.amazonaws.com", True),
+            ("s3.us-west-2.amazonaws.com", False),
+            ("s3.us-west-2.amazonaws.com", True),
+        ],
+    )
+    def test_access_favicon_via_aws_endpoints(
+        self, s3_bucket, s3_client, domain, use_virtual_address
+    ):
+        """Assert that /favicon.ico objects can be created/accessed/deleted using amazonaws host headers"""
+
+        s3_key = "favicon.ico"
+        content = b"test 123"
+        s3_client.put_object(Bucket=s3_bucket, Key=s3_key, Body=content)
+        s3_client.head_object(Bucket=s3_bucket, Key=s3_key)
+
+        path = s3_key if use_virtual_address else f"{s3_bucket}/{s3_key}"
+        url = f"{config.get_edge_url()}/{path}"
+        headers = aws_stack.mock_aws_request_headers("s3")
+        headers["host"] = f"{s3_bucket}.{domain}" if use_virtual_address else domain
+
+        # get object via *.amazonaws.com host header
+        result = requests.get(url, headers=headers)
+        assert result.ok
+        assert result.content == content
+
+        # delete object via *.amazonaws.com host header
+        result = requests.delete(url, headers=headers)
+        assert result.ok
+
+        # assert that object has been deleted
+        with pytest.raises(ClientError) as exc:
+            s3_client.head_object(Bucket=s3_bucket, Key=s3_key)
+        assert exc.value.response["Error"]["Message"] == "Not Found"
 
 
 def _anon_client(service: str):
