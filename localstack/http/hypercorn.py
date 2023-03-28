@@ -120,7 +120,7 @@ class ProxyServer(GatewayServer):
     and just forward all incoming requests to a backend.
     """
 
-    def __init__(self, forward_base_url: str, port: int, bind_address: str, use_ssl: bool = False):
+    def __init__(self, forward_base_url: str, listen: List[HostAndPort], use_ssl: bool = False):
         """
         Creates a new ProxyServer instance.
 
@@ -131,4 +131,4 @@ class ProxyServer(GatewayServer):
         """
         gateway = Gateway()
         gateway.request_handlers.append(ProxyHandler(forward_base_url=forward_base_url))
-        super().__init__(gateway, port, bind_address, use_ssl)
+        super().__init__(gateway, listen, use_ssl)
