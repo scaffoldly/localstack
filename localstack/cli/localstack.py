@@ -288,10 +288,17 @@ def cmd_config_show(format):
         print_config_pairs()  # fall back to plain
 
 
+class ConfigEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, config.HostAndPort):
+            return str(o)
+        return super().default(o)
+
+
 def print_config_json():
     import json
 
-    console.print(json.dumps(dict(config.collect_config_items())))
+    console.print(json.dumps(dict(config.collect_config_items()), cls=ConfigEncoder))
 
 
 def print_config_pairs():
