@@ -2,7 +2,7 @@ import unittest
 
 
 @unittest.mock.patch("localstack.config.ALLOW_NONSTANDARD_REGIONS", True)
-def test_nonstandard_regions(create_boto_client, monkeypatch, aws_client):
+def test_nonstandard_regions(create_boto_client, monkeypatch):
     """
     Ensure that non-standard AWS regions can be used vertically.
     """
